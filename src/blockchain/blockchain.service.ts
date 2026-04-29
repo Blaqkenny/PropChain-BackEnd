@@ -198,9 +198,8 @@ export class BlockchainService {
 
     // Create a local transaction hash using blockchain-compatible hashing
     const localHash = this.generateBlockchainHash({
-      transactionId: dto.transactionId,
-      timestamp: Date.now(),
       ...dto,
+      timestamp: Date.now(),
     });
 
     await this.prisma.transaction.update({
