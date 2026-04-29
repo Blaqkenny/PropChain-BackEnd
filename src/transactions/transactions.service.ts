@@ -201,12 +201,10 @@ export class TransactionsService {
       // Get wallet addresses - use provided or fallback to placeholder
       const buyerAddress =
         dto.buyerAddress ||
-        transaction.buyer?.walletAddress ||
         `0x${transaction.buyerId.substring(0, 40)}`;
 
       const sellerAddress =
         dto.sellerAddress ||
-        transaction.seller?.walletAddress ||
         `0x${transaction.sellerId.substring(0, 40)}`;
 
       // Validate addresses

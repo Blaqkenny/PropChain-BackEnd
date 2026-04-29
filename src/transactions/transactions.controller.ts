@@ -25,8 +25,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { AuthUserPayload } from '../auth/types/auth.types';
-import { UserRole } from '../common/common.types';
+import { AuthUserPayload } from '../auth/types/auth-user.type';
+import { UserRole } from '../types/prisma.types';
 import {
   CreateTransactionDto,
   UpdateTransactionDto,
