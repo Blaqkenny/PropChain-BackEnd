@@ -23,6 +23,10 @@ describe('TransactionsService', () => {
           provide: PrismaService,
           useValue: mockPrismaService,
         },
+        {
+          provide: NotificationsService,
+          useValue: notificationsService,
+        },
       ],
     }).compile();
 
@@ -79,6 +83,33 @@ describe('TransactionsService', () => {
 
       const result = await service.getTransactionById('t-1', 'user-3', false);
       expect(result).toBeNull();
+    });
+  });
+
+  describe('updateStatus', () => {
+    it('updates status and logs history in a transaction', async () => {
+      const mockTx = { id: 'tx-123', status: TransactionStatus.PENDING };
+      prisma.transaction.findUnique.mockResolvedValue(mockTx);
+      prisma.transaction.update.mockResolvedValue({ ...mockTx, status: TransactionStatus.COMPLETED });
+      prisma.transactionHistory.create.mockResolvedValue({ id: 'hist-1' });
+      prisma.$transaction.mockImplementation(async (cb) => cb(prisma));
+
+      const result = await service.updateStatus('tx-123', TransactionStatus.COMPLETED, 'actor-1');
+
+      expect(prisma.transaction.update).toHaveBeenCalledWith({
+        where: { id: 'tx-123' },
+        data: { status: TransactionStatus.COMPLETED },
+      });
+      expect(prisma.transactionHistory.create).toHaveBeenCalledWith({
+        data: {
+          transactionId: 'tx-123',
+          status: TransactionStatus.COMPLETED,
+          actorId: 'actor-1',
+          notes: 'Status updated from PENDING to COMPLETED',
+        },
+      });
+      expect(notificationsService.handleTransactionUpdate).toHaveBeenCalledWith('tx-123');
+      expect(result.status).toBe(TransactionStatus.COMPLETED);
     });
   });
 });
