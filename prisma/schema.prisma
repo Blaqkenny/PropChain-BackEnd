@@ -465,6 +465,7 @@ model TransactionTaxStrategy {
 model Document {
   id             String       @id @default(uuid())
   propertyId     String?      @map("property_id")
+  transactionId  String?      @map("transaction_id") // #354
   userId         String       @map("user_id")
   documentType   DocumentType @map("document_type")
   fileName       String       @map("file_name")
@@ -494,12 +495,33 @@ model Document {
   dispute  Dispute?  @relation(fields: [disputeId], references: [id], onDelete: SetNull)
 
   @@index([propertyId])
+  @@index([transactionId])
   @@index([userId])
   @@index([documentType])
   @@index([category])
   @@index([isExpired])
   @@index([expiresAt])
   @@map("documents")
+}
+
+// Persisted version history for documents (#354)
+model DocumentVersion {
+  id           String   @id @default(uuid())
+  documentId   String   @map("document_id")
+  versionNumber Int     @map("version_number")
+  fileUrl      String   @map("file_url")
+  fileName     String   @map("file_name")
+  fileSize     Int      @map("file_size")
+  uploadedById String?  @map("uploaded_by_id")
+  changeNote   String?  @map("change_note")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  uploadedBy User?    @relation("DocumentVersionUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@unique([documentId, versionNumber])
+  @@index([documentId, createdAt])
+  @@map("document_versions")
 }
 
 // User Preferences model
