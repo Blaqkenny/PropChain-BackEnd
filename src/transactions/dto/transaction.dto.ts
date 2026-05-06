@@ -1,60 +1,163 @@
-import { IsString, IsNumber, IsOptional, IsIn, Min } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsEnum,
+  IsUUID,
+  IsDecimal,
+  Min,
+} from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 
-export const TRANSACTION_TYPE_ENUM = ['SALE', 'PURCHASE', 'TRANSFER'] as const;
+export enum TransactionTypeDto {
+  SALE = 'SALE',
+  PURCHASE = 'PURCHASE',
+  TRANSFER = 'TRANSFER',
+}
+
+export enum TransactionStatusDto {
+  PENDING = 'PENDING',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+  FAILED = 'FAILED',
+}
 
 export class CreateTransactionDto {
+  @ApiProperty({ description: 'Property ID' })
   @IsString()
+  @IsUUID()
   propertyId: string;
 
+  @ApiProperty({ description: 'Buyer user ID' })
   @IsString()
+  @IsUUID()
   buyerId: string;
 
+  @ApiProperty({ description: 'Seller user ID' })
   @IsString()
+  @IsUUID()
   sellerId: string;
 
+  @ApiProperty({ description: 'Transaction amount in currency' })
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   amount: number;
 
-  @IsIn(TRANSACTION_TYPE_ENUM)
-  type: (typeof TRANSACTION_TYPE_ENUM)[number];
+  @ApiProperty({ enum: TransactionTypeDto })
+  @IsEnum(TransactionTypeDto)
+  type: TransactionTypeDto;
 
+  @ApiPropertyOptional({ description: 'Transaction notes' })
   @IsOptional()
   @IsString()
   notes?: string;
-
-  @IsOptional()
-  @IsString()
-  blockchainHash?: string;
-
-  @IsOptional()
-  @IsString()
-  contractAddress?: string;
 }
 
-export class CalculateFeesDto {
-  @IsNumber()
-  @Min(0)
+export class UpdateTransactionDto {
+  @ApiPropertyOptional({ enum: TransactionStatusDto })
+  @IsOptional()
+  @IsEnum(TransactionStatusDto)
+  status?: TransactionStatusDto;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class RecordTransactionOnChainDto {
+  @ApiPropertyOptional({ description: 'Buyer wallet address' })
+  @IsOptional()
+  @IsString()
+  buyerAddress?: string;
+
+  @ApiPropertyOptional({ description: 'Seller wallet address' })
+  @IsOptional()
+  @IsString()
+  sellerAddress?: string;
+
+  @ApiPropertyOptional({ description: 'Additional metadata' })
+  @IsOptional()
+  metadata?: Record<string, any>;
+}
+
+export class TransactionResponseDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  propertyId: string;
+
+  @ApiProperty()
+  buyerId: string;
+
+  @ApiProperty()
+  sellerId: string;
+
+  @ApiProperty()
   amount: number;
 
-  @IsOptional()
-  @IsIn(TRANSACTION_TYPE_ENUM)
-  type?: (typeof TRANSACTION_TYPE_ENUM)[number];
+  @ApiProperty({ enum: TransactionTypeDto })
+  type: TransactionTypeDto;
 
-  /** Agent commission rate override (0–1). Defaults to 0.03 */
-  @IsOptional()
-  @IsNumber()
-  agentCommissionRate?: number;
+  @ApiProperty({ enum: TransactionStatusDto })
+  status: TransactionStatusDto;
+
+  @ApiPropertyOptional()
+  blockchainHash?: string;
+
+  @ApiPropertyOptional()
+  contractAddress?: string;
+
+  @ApiPropertyOptional()
+  notes?: string;
+
+  @ApiProperty()
+  createdAt: Date;
+
+  @ApiProperty()
+  updatedAt: Date;
 }
 
-export class FeeBreakdown {
-  transactionAmount: number;
-  platformFee: number;
-  platformFeeRate: number;
-  agentCommission: number;
-  agentCommissionRate: number;
-  tax: number;
-  taxRate: number;
-  totalFees: number;
-  totalAmount: number;
+export class TransactionListQueryDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  propertyId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  buyerId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  sellerId?: string;
+
+  @ApiPropertyOptional({ enum: TransactionStatusDto })
+  @IsOptional()
+  @IsEnum(TransactionStatusDto)
+  status?: TransactionStatusDto;
+
+  @ApiPropertyOptional({ enum: TransactionTypeDto })
+  @IsOptional()
+  @IsEnum(TransactionTypeDto)
+  type?: TransactionTypeDto;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  page: number = 1;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  limit: number = 20;
 }
