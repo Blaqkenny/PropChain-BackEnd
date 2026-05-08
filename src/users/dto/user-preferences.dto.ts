@@ -66,6 +66,10 @@ export class CreateUserPreferencesDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
+  inAppNotifications?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   propertyAlerts?: boolean;
 
   @ApiPropertyOptional()
@@ -121,6 +125,10 @@ export class UpdateUserPreferencesDto {
   inAppNotifications?: boolean;
 
   @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  inAppNotifications?: boolean;
+
   @IsOptional()
   @IsBoolean()
   propertyAlerts?: boolean;

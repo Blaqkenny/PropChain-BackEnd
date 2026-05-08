@@ -152,6 +152,13 @@ enum MilestoneStatus {
   DELAYED
 }
 
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  CANCELLED
+}
+
 // User model
 model User {
   id                       String    @id @default(uuid())
