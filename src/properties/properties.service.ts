@@ -3,6 +3,7 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../database/prisma.service';
 import { CreatePropertyDto, UpdatePropertyDto } from './dto/property.dto';
 import { FraudService } from '../fraud/fraud.service';
+import { PropertyStatus } from '../common/common.types';
 
 interface FindAllParams {
   skip?: number;
@@ -27,6 +28,7 @@ export class PropertiesService {
         price: new Decimal(price.toString()),
         squareFeet: squareFeet ? new Decimal(squareFeet.toString()) : null,
         lotSize: lotSize ? new Decimal(lotSize.toString()) : null,
+        status: PropertyStatus.DRAFT,
         owner: {
           connect: { id: ownerId },
         },
