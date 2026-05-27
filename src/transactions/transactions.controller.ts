@@ -86,9 +86,7 @@ export class TransactionsController {
       },
     },
   })
-  async findAll(
-    @Query() query: TransactionListQueryDto,
-  ): Promise<{
+  async findAll(@Query() query: TransactionListQueryDto): Promise<{
     total: number;
     page: number;
     limit: number;

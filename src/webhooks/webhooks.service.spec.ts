@@ -10,10 +10,7 @@ describe('WebhooksService', () => {
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        WebhooksService,
-        { provide: PrismaService, useValue: mockPrisma },
-      ],
+      providers: [WebhooksService, { provide: PrismaService, useValue: mockPrisma }],
     }).compile();
 
     service = module.get<WebhooksService>(WebhooksService);
@@ -40,17 +37,13 @@ describe('WebhooksService', () => {
 
   describe('findOne', () => {
     it('should throw NotFoundException', async () => {
-      await expect(service.findOne('bad-id', 'user-1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.findOne('bad-id', 'user-1')).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('remove', () => {
     it('should throw NotFoundException', async () => {
-      await expect(service.remove('1', 'user-1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.remove('1', 'user-1')).rejects.toThrow(NotFoundException);
     });
   });
 });

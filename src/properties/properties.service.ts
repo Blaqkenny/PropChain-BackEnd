@@ -111,8 +111,8 @@ export class PropertiesService {
       status === PropertyStatus.DRAFT
         ? 'DRAFT'
         : status === PropertyStatus.ARCHIVED
-        ? 'ARCHIVED'
-        : 'ACTIVE';
+          ? 'ARCHIVED'
+          : 'ACTIVE';
 
     const result = await this.prisma.property.updateMany({
       where: { id: { in: propertyIds } },

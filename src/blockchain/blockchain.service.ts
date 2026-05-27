@@ -44,7 +44,10 @@ export class BlockchainService {
   private contract: any;
   private transactionCache = new Map<string, BlockchainTransaction>();
 
-  constructor(private configService: ConfigService, private prisma: PrismaService) {
+  constructor(
+    private configService: ConfigService,
+    private prisma: PrismaService,
+  ) {
     this.initializeConfig();
   }
 

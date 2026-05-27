@@ -200,14 +200,12 @@ describe('TransactionsService', () => {
       }),
       include: expect.any(Object),
     });
-    mockPrismaService.user.findUnique
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({
-        id: 'seller-1',
-        firstName: 'Seller',
-        lastName: 'One',
-        email: 'seller@example.com',
-      });
+    mockPrismaService.user.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: 'seller-1',
+      firstName: 'Seller',
+      lastName: 'One',
+      email: 'seller@example.com',
+    });
 
     await expect(
       service.createTransaction(
@@ -305,14 +303,12 @@ describe('TransactionsService', () => {
       address: '123 Main St',
       ownerId: 'seller-1',
     });
-    mockPrismaService.user.findUnique
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({
-        id: 'seller-1',
-        firstName: 'Seller',
-        lastName: 'One',
-        email: 'seller@example.com',
-      });
+    mockPrismaService.user.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: 'seller-1',
+      firstName: 'Seller',
+      lastName: 'One',
+      email: 'seller@example.com',
+    });
 
     await expect(
       service.createTransaction(

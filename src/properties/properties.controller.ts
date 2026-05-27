@@ -7,7 +7,11 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { AuthUserPayload } from '../auth/types/auth-user.type';
 import { UserRole } from '../types/prisma.types';
-import { BulkPropertyStatusUpdateDto, BulkPropertyDeleteDto, BulkPropertyExportDto } from './dto/bulk-operations.dto';
+import {
+  BulkPropertyStatusUpdateDto,
+  BulkPropertyDeleteDto,
+  BulkPropertyExportDto,
+} from './dto/bulk-operations.dto';
 
 @Controller('properties')
 export class PropertiesController {
@@ -48,10 +52,7 @@ export class PropertiesController {
     @Body() body: BulkPropertyStatusUpdateDto,
     @CurrentUser() user: AuthUserPayload,
   ) {
-    return this.propertiesService.bulkUpdatePropertyStatus(
-      body.propertyIds,
-      body.status,
-    );
+    return this.propertiesService.bulkUpdatePropertyStatus(body.propertyIds, body.status);
   }
 
   @Post('bulk/delete')
@@ -67,9 +68,6 @@ export class PropertiesController {
     @Body() body: BulkPropertyExportDto,
     @CurrentUser() user: AuthUserPayload,
   ) {
-    return this.propertiesService.bulkExportProperties(
-      body.propertyIds,
-      body.filter,
-    );
+    return this.propertiesService.bulkExportProperties(body.propertyIds, body.filter);
   }
 }

@@ -224,5 +224,8 @@ export class UpdateNotificationPreferencesDto {
   })
   @IsOptional()
   @IsObject()
-  perEventSettings?: Record<string, { email?: boolean; sms?: boolean; push?: boolean; inApp?: boolean }>;
+  perEventSettings?: Record<
+    string,
+    { email?: boolean; sms?: boolean; push?: boolean; inApp?: boolean }
+  >;
 }

@@ -1,21 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { CreateWebhookDto, UpdateWebhookDto } from './webhook.dto';
-import * as crypto from 'crypto';
 import { Cron, CronExpression } from '@nestjs/schedule';
-
-// Enum fallbacks since Prisma client doesn't export these (models not in schema)
-const WebhookEventType: Record<string, string> = {
-  PROPERTY_CREATED: 'PROPERTY_CREATED',
-  PROPERTY_UPDATED: 'PROPERTY_UPDATED',
-  TRANSACTION_COMPLETED: 'TRANSACTION_COMPLETED',
-};
-const WebhookDeliveryStatus: Record<string, string> = {
-  PENDING: 'PENDING',
-  SUCCESS: 'SUCCESS',
-  FAILED: 'FAILED',
-  RETRYING: 'RETRYING',
-};
 
 @Injectable()
 export class WebhooksService {

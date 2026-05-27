@@ -18,7 +18,13 @@ describe('TransactionAuditService', () => {
   it('creates an audit log entry with correct fields', async () => {
     mockPrisma.transactionHistory.create.mockResolvedValue({ id: 'log-1' });
 
-    await service.log('tx-1', 'CREATED', null, { amount: 100 }, { actorId: 'user-1', ipAddress: '127.0.0.1' });
+    await service.log(
+      'tx-1',
+      'CREATED',
+      null,
+      { amount: 100 },
+      { actorId: 'user-1', ipAddress: '127.0.0.1' },
+    );
 
     expect(mockPrisma.transactionHistory.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
