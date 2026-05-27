@@ -28,6 +28,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { BlockchainModule } from './blockchain/blockchain.module';
 import { TransactionsModule } from './transactions/transactions.module';
 import { FavoritesModule } from './favorites/favorites.module';
+import { PropertyViewsModule } from './property-views/property-views.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -66,6 +67,7 @@ import { FavoritesModule } from './favorites/favorites.module';
     BlockchainModule,
     TransactionsModule,
     FavoritesModule,
+    PropertyViewsModule,
   ],
 
   controllers: [AppController],

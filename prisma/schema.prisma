@@ -224,6 +224,7 @@ model User {
   createdTaxStrategies    TransactionTaxStrategy[] @relation("CreatedTransactionTaxStrategies")
   transactionHistory      TransactionHistory[]
   favorites               PropertyFavorite[]
+  propertyViews           PropertyView[]
 
   @@index([email])
   @@index([role])
@@ -397,6 +398,7 @@ model Property {
   latitude     Float?
   longitude    Float?
   features     String[] // Array of features (pool, garage, etc.)
+  viewCount    Int            @default(0) @map("view_count")
   createdAt    DateTime       @default(now()) @map("created_at")
   updatedAt    DateTime       @updatedAt @map("updated_at")
 
@@ -406,12 +408,14 @@ model Property {
   documents    Document[]
   fraudAlerts  FraudAlert[]
   favorites    PropertyFavorite[]
+  views        PropertyView[]
 
   @@index([ownerId])
   @@index([status])
   @@index([city, state])
   @@index([price])
   @@index([propertyType])
+  @@index([viewCount])
   @@map("properties")
 }
 
@@ -429,6 +433,26 @@ model PropertyFavorite {
   @@index([userId, createdAt])
   @@index([propertyId])
   @@map("property_favorites")
+}
+
+// Property Views — raw view events for analytics (#TASK2)
+model PropertyView {
+  id         String   @id @default(uuid())
+  propertyId String   @map("property_id")
+  userId     String?  @map("user_id")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  referrer   String?
+  sessionId  String?  @map("session_id")
+  viewedAt   DateTime @default(now()) @map("viewed_at")
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  user     User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([propertyId, viewedAt])
+  @@index([userId])
+  @@index([ipAddress])
+  @@map("property_views")
 }
 
 // Transaction model
