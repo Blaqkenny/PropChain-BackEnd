@@ -218,7 +218,7 @@ export class PropertyImagesService {
       select: { id: true },
     });
 
-    const existingIds = new Set(existing.map((e) => e.id));
+    const existingIds = new Set(existing.map((e: { id: string }) => e.id));
     if (imageIds.length !== existingIds.size) {
       throw new BadRequestException(
         `Reorder list must contain exactly all ${existingIds.size} image IDs of this property`,
