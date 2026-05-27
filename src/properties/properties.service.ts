@@ -132,7 +132,7 @@ export class PropertiesService {
 
     return {
       deletedCount: result.count,
-      propertyIds: result.ids,
+      propertyIds,
     };
   }
 
