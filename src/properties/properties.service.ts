@@ -15,6 +15,7 @@ import {
   canTransitionPropertyStatus,
   getAllowedNextPropertyStatuses,
 } from './property-status.constants';
+import { PropertyStatus } from '../types/prisma.types';
 
 interface FindAllParams {
   skip?: number;
@@ -372,5 +373,107 @@ export class PropertiesService {
     }
 
     return where;
+  async bulkUpdatePropertyStatus(
+    propertyIds: string[],
+    status: PropertyStatus,
+  ): Promise<{ updatedCount: number }> {
+    const validStatus =
+      status === PropertyStatus.DRAFT
+        ? 'DRAFT'
+        : status === PropertyStatus.ARCHIVED
+          ? 'ARCHIVED'
+          : 'ACTIVE';
+
+    const result = await this.prisma.property.updateMany({
+      where: { id: { in: propertyIds } },
+      data: { status: validStatus },
+    });
+
+    return { updatedCount: result.count };
+  }
+
+  async bulkDeleteProperties(propertyIds: string[]): Promise<{
+    deletedCount: number;
+    propertyIds: string[];
+  }> {
+    const result = await this.prisma.property.deleteMany({
+      where: { id: { in: propertyIds } },
+    });
+
+    return {
+      deletedCount: result.count,
+      propertyIds,
+    };
+  }
+
+  async bulkExportProperties(
+    propertyIds: string[],
+    filter?: string,
+  ): Promise<{ total: number; data: Record<string, any>[] }> {
+    const propertyWhere: Record<string, unknown> = { id: { in: propertyIds } };
+
+    if (filter) {
+      propertyWhere.title = { contains: filter, mode: 'insensitive' as const };
+    }
+
+    const properties = await this.prisma.property.findMany({
+      where: propertyWhere,
+      select: {
+        id: true,
+        title: true,
+        address: true,
+        city: true,
+        state: true,
+        zipCode: true,
+        price: true,
+        propertyType: true,
+        bedrooms: true,
+        bathrooms: true,
+        squareFeet: true,
+        lotSize: true,
+        yearBuilt: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        ownerId: true,
+        owner: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+          },
+        },
+      },
+    });
+
+    const exportData: Record<string, any>[] = properties.map((prop: Record<string, any>) => ({
+      id: prop.id,
+      title: prop.title,
+      address: prop.address,
+      city: prop.city,
+      state: prop.state,
+      zipCode: prop.zipCode,
+      price: Number(prop.price),
+      propertyType: prop.propertyType,
+      bedrooms: prop.bedrooms,
+      bathrooms: prop.bathrooms,
+      squareFeet: prop.squareFeet,
+      lotSize: prop.lotSize,
+      yearBuilt: prop.yearBuilt,
+      status: prop.status,
+      ownerId: prop.ownerId,
+      ownerEmail: prop.owner.email,
+      ownerName: `${prop.owner.firstName} ${prop.owner.lastName}`,
+      ownerPhone: prop.owner.phone,
+      createdAt: prop.createdAt,
+      updatedAt: prop.updatedAt,
+    }));
+
+    return {
+      total: exportData.length,
+      data: exportData,
+    };
   }
 }
