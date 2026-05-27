@@ -1,7 +1,3 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, UseGuards } from '@nestjs/common';
-import { UsersService } from './users.service';
-import { CreateUserDto, UpdateUserDto, UpdateUserProfileDto } from './dto/user.dto';
-import { DeactivateAccountDto, ReactivateAccountDto } from './dto/deactivation.dto';
 import {
   Body,
   Controller,
@@ -29,7 +25,13 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { AuthUserPayload } from '../auth/types/auth-user.type';
 import { UserRole } from '../types/prisma.types';
 import { UsersService } from './users.service';
-import { CreateUserDto, SearchUsersDto, UpdatePreferencesDto, UpdateUserDto } from './dto/user.dto';
+import {
+  CreateUserDto,
+  SearchUsersDto,
+  UpdatePreferencesDto,
+  UpdateUserDto,
+  UpdateUserProfileDto,
+} from './dto/user.dto';
 import { DeactivateAccountDto, ReactivateAccountDto } from './dto/deactivation.dto';
 
 @Controller('users')
