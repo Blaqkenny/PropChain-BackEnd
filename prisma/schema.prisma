@@ -406,9 +406,10 @@ model Property {
   updatedAt    DateTime       @updatedAt @map("updated_at")
 
   // Relations
-  owner        User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner        User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   transactions Transaction[]
   documents    Document[]
+  images       PropertyImage[]
   fraudAlerts  FraudAlert[]
   favorites    PropertyFavorite[]
   views        PropertyView[]
@@ -424,103 +425,28 @@ model Property {
   @@map("properties")
 }
 
-// Property Favorites — users save properties for later (#TASK1)
-model PropertyFavorite {
-  id         String   @id @default(uuid())
-  userId     String   @map("user_id")
-  propertyId String   @map("property_id")
-  createdAt  DateTime @default(now()) @map("created_at")
-
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, propertyId])
-  @@index([userId, createdAt])
-  @@index([propertyId])
-  @@map("property_favorites")
-}
-
-// Property Views — raw view events for analytics (#TASK2)
-model PropertyView {
-  id         String   @id @default(uuid())
-  propertyId String   @map("property_id")
-  userId     String?  @map("user_id")
-  ipAddress  String?  @map("ip_address")
-  userAgent  String?  @map("user_agent")
-  referrer   String?
-  sessionId  String?  @map("session_id")
-  viewedAt   DateTime @default(now()) @map("viewed_at")
-
-  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  user     User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([propertyId, viewedAt])
-  @@index([userId])
-  @@index([ipAddress])
-  @@map("property_views")
-}
-
-// Neighborhood data — walk score, crime stats, schools, amenities (#TASK4)
-model Neighborhood {
+// Property gallery image with optimized variants and ordering (#TASK2)
+model PropertyImage {
   id           String   @id @default(uuid())
-  name         String
-  city         String
-  state        String
-  country      String   @default("USA")
-  walkScore    Int?     @map("walk_score")
-  transitScore Int?     @map("transit_score")
-  bikeScore    Int?     @map("bike_score")
-  crimeIndex   Float?   @map("crime_index")
-  crimeRate    Json?    @map("crime_rate")
-  schoolRating Float?   @map("school_rating")
-  description  String?  @db.Text
-  metadata     Json?
+  propertyId   String   @map("property_id")
+  url          String   // optimized full-size variant
+  thumbnailUrl String   @map("thumbnail_url")
+  mediumUrl    String   @map("medium_url")
+  filename     String
+  mimeType     String   @map("mime_type")
+  size         Int      // bytes (optimized full-size)
+  width        Int?
+  height       Int?
+  order        Int      @default(0)
+  isPrimary    Boolean  @default(false) @map("is_primary")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  properties Property[]
-  schools    NeighborhoodSchool[]
-  amenities  NeighborhoodAmenity[]
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
-  @@unique([name, city, state])
-  @@index([city, state])
-  @@map("neighborhoods")
-}
-
-model NeighborhoodSchool {
-  id                  String   @id @default(uuid())
-  neighborhoodId      String   @map("neighborhood_id")
-  name                String
-  type                String
-  rating              Float
-  distanceMiles       Float?   @map("distance_miles")
-  studentTeacherRatio Float?   @map("student_teacher_ratio")
-  enrollmentCount     Int?     @map("enrollment_count")
-  url                 String?
-  createdAt           DateTime @default(now()) @map("created_at")
-
-  neighborhood Neighborhood @relation(fields: [neighborhoodId], references: [id], onDelete: Cascade)
-
-  @@index([neighborhoodId])
-  @@index([type])
-  @@map("neighborhood_schools")
-}
-
-model NeighborhoodAmenity {
-  id             String   @id @default(uuid())
-  neighborhoodId String   @map("neighborhood_id")
-  category       String
-  name           String
-  distanceMiles  Float?   @map("distance_miles")
-  rating         Float?
-  address        String?
-  createdAt      DateTime @default(now()) @map("created_at")
-
-  neighborhood Neighborhood @relation(fields: [neighborhoodId], references: [id], onDelete: Cascade)
-
-  @@index([neighborhoodId])
-  @@index([category])
-  @@map("neighborhood_amenities")
+  @@index([propertyId, order])
+  @@index([propertyId, isPrimary])
+  @@map("property_images")
 }
 
 // Transaction model
