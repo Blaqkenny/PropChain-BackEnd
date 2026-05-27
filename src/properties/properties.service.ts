@@ -9,6 +9,7 @@ import { PrismaService } from '../database/prisma.service';
 import { CreatePropertyDto, UpdatePropertyDto } from './dto/property.dto';
 import { SearchPropertiesDto } from './dto/search-properties.dto';
 import { FraudService } from '../fraud/fraud.service';
+import { GeocodingService } from './geocoding.service';
 import { PropertyStatus, UserRole } from '../types/prisma.types';
 import {
   canTransitionPropertyStatus,
@@ -35,10 +36,29 @@ export class PropertiesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly fraudService: FraudService,
+    private readonly geocodingService: GeocodingService,
   ) {}
 
   async create(createPropertyDto: CreatePropertyDto, ownerId: string) {
-    const { price, squareFeet, lotSize, ...rest } = createPropertyDto;
+    const { price, squareFeet, lotSize, latitude, longitude, ...rest } =
+      createPropertyDto;
+
+    // Auto-geocode when the caller didn't supply coordinates explicitly.
+    let resolvedLat = latitude;
+    let resolvedLng = longitude;
+    if (resolvedLat === undefined || resolvedLng === undefined) {
+      const geo = await this.geocodingService.geocodeAddress({
+        address: rest.address,
+        city: rest.city,
+        state: rest.state,
+        zipCode: rest.zipCode,
+        country: rest.country,
+      });
+      if (geo) {
+        resolvedLat = resolvedLat ?? geo.latitude;
+        resolvedLng = resolvedLng ?? geo.longitude;
+      }
+    }
 
     const property = await this.prisma.property.create({
       data: {
@@ -46,6 +66,8 @@ export class PropertiesService {
         price: new Decimal(price.toString()),
         squareFeet: squareFeet ? new Decimal(squareFeet.toString()) : null,
         lotSize: lotSize ? new Decimal(lotSize.toString()) : null,
+        latitude: resolvedLat,
+        longitude: resolvedLng,
         owner: {
           connect: { id: ownerId },
         },
@@ -95,7 +117,53 @@ export class PropertiesService {
   }
 
   async update(id: string, updatePropertyDto: UpdatePropertyDto) {
-    const { price, squareFeet, lotSize, ...rest } = updatePropertyDto;
+    const { price, squareFeet, lotSize, latitude, longitude, ...rest } =
+      updatePropertyDto;
+
+    // If the user explicitly provided lat/lng, honor them. Otherwise,
+    // re-geocode when any address-defining field changes.
+    let resolvedLat = latitude;
+    let resolvedLng = longitude;
+    const callerProvidedCoords =
+      latitude !== undefined && longitude !== undefined;
+
+    if (!callerProvidedCoords) {
+      const existing = await this.prisma.property.findUnique({
+        where: { id },
+        select: {
+          address: true,
+          city: true,
+          state: true,
+          zipCode: true,
+          country: true,
+        },
+      });
+
+      if (existing) {
+        const before = {
+          address: existing.address,
+          city: existing.city,
+          state: existing.state,
+          zipCode: existing.zipCode,
+          country: existing.country,
+        };
+        const after = {
+          address: rest.address ?? existing.address,
+          city: rest.city ?? existing.city,
+          state: rest.state ?? existing.state,
+          zipCode: rest.zipCode ?? existing.zipCode,
+          country: existing.country, // not in UpdatePropertyDto
+        };
+
+        if (this.geocodingService.hasAddressChanged(before, after)) {
+          const geo = await this.geocodingService.geocodeAddress(after);
+          if (geo) {
+            resolvedLat = geo.latitude;
+            resolvedLng = geo.longitude;
+          }
+        }
+      }
+    }
 
     return this.prisma.property.update({
       where: { id },
@@ -104,6 +172,8 @@ export class PropertiesService {
         price: price ? new Decimal(price.toString()) : undefined,
         squareFeet: squareFeet ? new Decimal(squareFeet.toString()) : undefined,
         lotSize: lotSize ? new Decimal(lotSize.toString()) : undefined,
+        latitude: resolvedLat,
+        longitude: resolvedLng,
       },
     });
   }
