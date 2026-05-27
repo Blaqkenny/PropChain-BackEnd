@@ -4,7 +4,23 @@ import { PrismaService } from '../database/prisma.service';
 import { CreatePropertyDto, UpdatePropertyDto } from './dto/property.dto';
 import { AssignAgentDto, UpdateAgentAssignmentDto } from './dto/agent-assignment.dto';
 import { AuthUserPayload } from '../auth/types/auth-user.type';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { Decimal } from '@prisma/client/runtime/library';
+import { PrismaService } from '../database/prisma.service';
+import { CreatePropertyDto, UpdatePropertyDto } from './dto/property.dto';
+import { SearchPropertiesDto } from './dto/search-properties.dto';
 import { FraudService } from '../fraud/fraud.service';
+import { GeocodingService } from './geocoding.service';
+import { PropertyStatus, UserRole } from '../types/prisma.types';
+import {
+  canTransitionPropertyStatus,
+  getAllowedNextPropertyStatuses,
+} from './property-status.constants';
 import { PropertyStatus } from '../types/prisma.types';
 
 interface FindAllParams {
@@ -14,15 +30,42 @@ interface FindAllParams {
   orderBy?: Record<string, 'asc' | 'desc'>;
 }
 
+export interface PaginatedPropertiesResult<T = unknown> {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 @Injectable()
 export class PropertiesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly fraudService: FraudService,
+    private readonly geocodingService: GeocodingService,
   ) {}
 
   async create(createPropertyDto: CreatePropertyDto, ownerId: string) {
-    const { price, squareFeet, lotSize, ...rest } = createPropertyDto;
+    const { price, squareFeet, lotSize, latitude, longitude, ...rest } =
+      createPropertyDto;
+
+    // Auto-geocode when the caller didn't supply coordinates explicitly.
+    let resolvedLat = latitude;
+    let resolvedLng = longitude;
+    if (resolvedLat === undefined || resolvedLng === undefined) {
+      const geo = await this.geocodingService.geocodeAddress({
+        address: rest.address,
+        city: rest.city,
+        state: rest.state,
+        zipCode: rest.zipCode,
+        country: rest.country,
+      });
+      if (geo) {
+        resolvedLat = resolvedLat ?? geo.latitude;
+        resolvedLng = resolvedLng ?? geo.longitude;
+      }
+    }
 
     const property = await this.prisma.property.create({
       data: {
@@ -30,6 +73,8 @@ export class PropertiesService {
         price: new Decimal(price.toString()),
         squareFeet: squareFeet ? new Decimal(squareFeet.toString()) : null,
         lotSize: lotSize ? new Decimal(lotSize.toString()) : null,
+        latitude: resolvedLat,
+        longitude: resolvedLng,
         owner: {
           connect: { id: ownerId },
         },
@@ -105,7 +150,53 @@ export class PropertiesService {
   }
 
   async update(id: string, updatePropertyDto: UpdatePropertyDto) {
-    const { price, squareFeet, lotSize, ...rest } = updatePropertyDto;
+    const { price, squareFeet, lotSize, latitude, longitude, ...rest } =
+      updatePropertyDto;
+
+    // If the user explicitly provided lat/lng, honor them. Otherwise,
+    // re-geocode when any address-defining field changes.
+    let resolvedLat = latitude;
+    let resolvedLng = longitude;
+    const callerProvidedCoords =
+      latitude !== undefined && longitude !== undefined;
+
+    if (!callerProvidedCoords) {
+      const existing = await this.prisma.property.findUnique({
+        where: { id },
+        select: {
+          address: true,
+          city: true,
+          state: true,
+          zipCode: true,
+          country: true,
+        },
+      });
+
+      if (existing) {
+        const before = {
+          address: existing.address,
+          city: existing.city,
+          state: existing.state,
+          zipCode: existing.zipCode,
+          country: existing.country,
+        };
+        const after = {
+          address: rest.address ?? existing.address,
+          city: rest.city ?? existing.city,
+          state: rest.state ?? existing.state,
+          zipCode: rest.zipCode ?? existing.zipCode,
+          country: existing.country, // not in UpdatePropertyDto
+        };
+
+        if (this.geocodingService.hasAddressChanged(before, after)) {
+          const geo = await this.geocodingService.geocodeAddress(after);
+          if (geo) {
+            resolvedLat = geo.latitude;
+            resolvedLng = geo.longitude;
+          }
+        }
+      }
+    }
 
     return this.prisma.property.update({
       where: { id },
@@ -114,6 +205,8 @@ export class PropertiesService {
         price: price ? new Decimal(price.toString()) : undefined,
         squareFeet: squareFeet ? new Decimal(squareFeet.toString()) : undefined,
         lotSize: lotSize ? new Decimal(lotSize.toString()) : undefined,
+        latitude: resolvedLat,
+        longitude: resolvedLng,
       },
     });
   }
@@ -131,6 +224,187 @@ export class PropertiesService {
     });
   }
 
+  /**
+   * Transition a property's status according to the workflow state machine.
+   *
+   * Allowed happy path: DRAFT → PENDING → ACTIVE → UNDER_CONTRACT → SOLD.
+   * See `property-status.constants.ts` for the full transition map.
+   *
+   * Authorization: only the owner, an AGENT, or an ADMIN may transition.
+   *
+   * Throws:
+   * - NotFoundException if the property doesn't exist
+   * - ForbiddenException if the caller isn't allowed to mutate this property
+   * - BadRequestException if the transition isn't allowed by the workflow
+   */
+  async transitionStatus(
+    propertyId: string,
+    nextStatus: PropertyStatus,
+    actorId: string,
+    actorRole: UserRole | string,
+  ) {
+    const property = await this.prisma.property.findUnique({
+      where: { id: propertyId },
+      select: { id: true, ownerId: true, status: true },
+    });
+
+    if (!property) {
+      throw new NotFoundException(`Property ${propertyId} not found`);
+    }
+
+    const isOwner = property.ownerId === actorId;
+    const isPrivileged =
+      actorRole === UserRole.ADMIN || actorRole === UserRole.AGENT;
+    if (!isOwner && !isPrivileged) {
+      throw new ForbiddenException(
+        'You are not allowed to change the status of this property',
+      );
+    }
+
+    const currentStatus = property.status as PropertyStatus;
+
+    // Idempotent no-op: don't update, but echo the property back so callers
+    // can rely on a consistent shape.
+    if (currentStatus === nextStatus) {
+      return this.findOne(propertyId);
+    }
+
+    if (!canTransitionPropertyStatus(currentStatus, nextStatus)) {
+      const allowed = getAllowedNextPropertyStatuses(currentStatus).join(', ');
+      throw new BadRequestException(
+        `Cannot transition property from ${currentStatus} to ${nextStatus}. ` +
+          `Allowed next statuses: ${allowed || '(none)'}`,
+      );
+    }
+
+    await this.prisma.property.update({
+      where: { id: propertyId },
+      data: { status: nextStatus },
+    });
+
+    return this.findOne(propertyId);
+  }
+
+  /**
+   * Advanced property search with filters, pagination and sorting.
+   * Returns a paginated result so clients can render result counts and pages.
+   */
+  async searchProperties(dto: SearchPropertiesDto): Promise<PaginatedPropertiesResult> {
+    const where = this.buildSearchWhereClause(dto);
+
+    const page = dto.page && dto.page > 0 ? dto.page : 1;
+    const limit = dto.limit && dto.limit > 0 ? dto.limit : 20;
+    const skip = (page - 1) * limit;
+    const sortBy = dto.sortBy ?? 'createdAt';
+    const sortOrder = dto.sortOrder ?? 'desc';
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.property.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { [sortBy]: sortOrder },
+        include: {
+          owner: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
+          },
+        },
+      }),
+      this.prisma.property.count({ where }),
+    ]);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: limit > 0 ? Math.ceil(total / limit) : 0,
+    };
+  }
+
+  /**
+   * Build a Prisma `where` clause from a SearchPropertiesDto.
+   * Exposed as private and used only by `searchProperties`.
+   */
+  private buildSearchWhereClause(dto: SearchPropertiesDto): Record<string, unknown> {
+    const where: Record<string, unknown> = {};
+
+    // Price range
+    if (dto.minPrice !== undefined || dto.maxPrice !== undefined) {
+      const priceFilter: Record<string, Decimal> = {};
+      if (dto.minPrice !== undefined) {
+        priceFilter.gte = new Decimal(dto.minPrice.toString());
+      }
+      if (dto.maxPrice !== undefined) {
+        priceFilter.lte = new Decimal(dto.maxPrice.toString());
+      }
+      where.price = priceFilter;
+    }
+
+    // Location: granular fields (case-insensitive equality)
+    if (dto.city) {
+      where.city = { equals: dto.city, mode: 'insensitive' };
+    }
+    if (dto.state) {
+      where.state = { equals: dto.state, mode: 'insensitive' };
+    }
+    if (dto.zipCode) {
+      where.zipCode = dto.zipCode;
+    }
+    if (dto.country) {
+      where.country = { equals: dto.country, mode: 'insensitive' };
+    }
+
+    // Location: free-text fallback (matches across address/city/state/zipCode)
+    if (dto.location) {
+      where.OR = [
+        { address: { contains: dto.location, mode: 'insensitive' } },
+        { city: { contains: dto.location, mode: 'insensitive' } },
+        { state: { contains: dto.location, mode: 'insensitive' } },
+        { zipCode: { contains: dto.location, mode: 'insensitive' } },
+      ];
+    }
+
+    // Property type (case-insensitive)
+    if (dto.propertyType) {
+      where.propertyType = { equals: dto.propertyType, mode: 'insensitive' };
+    }
+
+    // Bedrooms: exact takes precedence over range
+    if (dto.bedrooms !== undefined) {
+      where.bedrooms = dto.bedrooms;
+    } else if (dto.minBedrooms !== undefined || dto.maxBedrooms !== undefined) {
+      const bedroomsFilter: Record<string, number> = {};
+      if (dto.minBedrooms !== undefined) bedroomsFilter.gte = dto.minBedrooms;
+      if (dto.maxBedrooms !== undefined) bedroomsFilter.lte = dto.maxBedrooms;
+      where.bedrooms = bedroomsFilter;
+    }
+
+    // Bathrooms: stored as Decimal — wrap accordingly
+    if (dto.bathrooms !== undefined) {
+      where.bathrooms = new Decimal(dto.bathrooms.toString());
+    } else if (dto.minBathrooms !== undefined || dto.maxBathrooms !== undefined) {
+      const bathroomsFilter: Record<string, Decimal> = {};
+      if (dto.minBathrooms !== undefined) {
+        bathroomsFilter.gte = new Decimal(dto.minBathrooms.toString());
+      }
+      if (dto.maxBathrooms !== undefined) {
+        bathroomsFilter.lte = new Decimal(dto.maxBathrooms.toString());
+      }
+      where.bathrooms = bathroomsFilter;
+    }
+
+    // Optional status filter
+    if (dto.status) {
+      where.status = dto.status;
+    }
+
+    return where;
   async bulkUpdatePropertyStatus(
     propertyIds: string[],
     status: PropertyStatus,
