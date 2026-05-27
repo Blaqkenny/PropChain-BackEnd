@@ -1,14 +1,18 @@
-import {
-  IsString,
-  IsNumber,
-  IsOptional,
-  IsEnum,
-  IsUUID,
-  IsDecimal,
-  Min,
-} from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsEnum, IsUUID, IsDecimal, Min } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+
+export interface FeeBreakdown {
+  transactionAmount: number;
+  platformFee: number;
+  platformFeeRate: number;
+  agentCommission: number;
+  agentCommissionRate: number;
+  tax: number;
+  taxRate: number;
+  totalFees: number;
+  totalAmount: number;
+}
 
 export enum TransactionTypeDto {
   SALE = 'SALE',
@@ -160,4 +164,21 @@ export class TransactionListQueryDto {
   @IsNumber()
   @Min(1)
   limit: number = 20;
+}
+
+export class CreateTransactionTaxStrategyDto {
+  @ApiProperty({ description: 'Tax strategy type' })
+  @IsString()
+  strategyType!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  estimatedTaxImpact?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  explanation?: string;
 }

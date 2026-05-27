@@ -1,11 +1,7 @@
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { BlockchainService } from '../blockchain/blockchain.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   CreateTransactionDto,
   UpdateTransactionDto,
@@ -23,6 +19,7 @@ export class TransactionsService {
   constructor(
     private prisma: PrismaService,
     private blockchainService: BlockchainService,
+    private notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -130,10 +127,7 @@ export class TransactionsService {
 
       return this.toResponseDto(transaction);
     } catch (error) {
-      this.logger.error(
-        `Failed to find transaction ${id}: ${error.message}`,
-        error.stack,
-      );
+      this.logger.error(`Failed to find transaction ${id}: ${error.message}`, error.stack);
       throw error;
     }
   }
@@ -141,10 +135,7 @@ export class TransactionsService {
   /**
    * Update a transaction
    */
-  async update(
-    id: string,
-    dto: UpdateTransactionDto,
-  ): Promise<TransactionResponseDto> {
+  async update(id: string, dto: UpdateTransactionDto): Promise<TransactionResponseDto> {
     try {
       const transaction = await this.prisma.transaction.findUnique({
         where: { id },
@@ -165,10 +156,7 @@ export class TransactionsService {
       this.logger.log(`Transaction updated: ${id}`);
       return this.toResponseDto(updated);
     } catch (error) {
-      this.logger.error(
-        `Failed to update transaction ${id}: ${error.message}`,
-        error.stack,
-      );
+      this.logger.error(`Failed to update transaction ${id}: ${error.message}`, error.stack);
       throw error;
     }
   }
@@ -176,10 +164,7 @@ export class TransactionsService {
   /**
    * Record transaction on blockchain
    */
-  async recordOnBlockchain(
-    id: string,
-    dto: RecordTransactionOnChainDto,
-  ): Promise<any> {
+  async recordOnBlockchain(id: string, dto: RecordTransactionOnChainDto): Promise<any> {
     try {
       const transaction = await this.prisma.transaction.findUnique({
         where: { id },
@@ -199,38 +184,30 @@ export class TransactionsService {
       }
 
       // Get wallet addresses - use provided or fallback to placeholder
-      const buyerAddress =
-        dto.buyerAddress ||
-        `0x${transaction.buyerId.substring(0, 40)}`;
+      const buyerAddress = dto.buyerAddress || `0x${transaction.buyerId.substring(0, 40)}`;
 
-      const sellerAddress =
-        dto.sellerAddress ||
-        `0x${transaction.sellerId.substring(0, 40)}`;
+      const sellerAddress = dto.sellerAddress || `0x${transaction.sellerId.substring(0, 40)}`;
 
       // Validate addresses
       if (
         !this.blockchainService.isValidAddress(buyerAddress) ||
         !this.blockchainService.isValidAddress(sellerAddress)
       ) {
-        this.logger.warn(
-          `Invalid addresses for transaction ${id}. Using fallback hashing.`,
-        );
+        this.logger.warn(`Invalid addresses for transaction ${id}. Using fallback hashing.`);
       }
 
       // Record on blockchain
-      const blockchainRecord = await this.blockchainService.recordTransactionOnBlockchain(
-        {
-          transactionId: id,
-          propertyId: transaction.propertyId,
-          buyerAddress,
-          sellerAddress,
-          amount: transaction.amount.toNumber(),
-          metadata: {
-            transactionType: transaction.type,
-            propertyAddress: transaction.property?.address,
-          },
+      const blockchainRecord = await this.blockchainService.recordTransactionOnBlockchain({
+        transactionId: id,
+        propertyId: transaction.propertyId,
+        buyerAddress,
+        sellerAddress,
+        amount: transaction.amount.toNumber(),
+        metadata: {
+          transactionType: transaction.type,
+          propertyAddress: transaction.property?.address,
         },
-      );
+      });
 
       // Update transaction with blockchain data
       const updated = await this.prisma.transaction.update({
@@ -275,11 +252,9 @@ export class TransactionsService {
         throw new BadRequestException('Transaction not recorded on blockchain');
       }
 
-      const verification = await this.blockchainService.verifyBlockchainTransaction(
-        {
-          transactionHash: transaction.blockchainHash,
-        },
-      );
+      const verification = await this.blockchainService.verifyBlockchainTransaction({
+        transactionHash: transaction.blockchainHash,
+      });
 
       // Update transaction status if verified and not already completed
       if (verification.verified && verification.status === 'success') {
@@ -291,9 +266,7 @@ export class TransactionsService {
         });
       }
 
-      this.logger.log(
-        `Transaction ${id} verification result: ${verification.verified}`,
-      );
+      this.logger.log(`Transaction ${id} verification result: ${verification.verified}`);
 
       return verification;
     } catch (error) {
@@ -310,6 +283,169 @@ export class TransactionsService {
    */
   async getBlockchainStats() {
     return this.blockchainService.getBlockchainStats();
+  }
+
+  /**
+   * Update transaction status
+   */
+  async updateTransactionStatus(
+    transactionId: string,
+    status: string,
+    actorId?: string,
+  ): Promise<TransactionResponseDto> {
+    try {
+      const transaction = await this.prisma.transaction.findUnique({
+        where: { id: transactionId },
+      });
+
+      if (!transaction) {
+        throw new NotFoundException('Transaction not found');
+      }
+
+      // Validate status transition: COMPLETED/CANCELLED are terminal
+      if (transaction.status === 'COMPLETED' || transaction.status === 'CANCELLED') {
+        throw new BadRequestException(
+          `Cannot change status from terminal state "${transaction.status}"`,
+        );
+      }
+
+      const updated = await this.prisma.transaction.update({
+        where: { id: transactionId },
+        data: { status: status as any },
+      });
+
+      this.logger.log(`Transaction ${transactionId} status updated to ${status}`);
+      return this.toResponseDto(updated);
+    } catch (error) {
+      this.logger.error(`Failed to update transaction status: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a transaction with owner validation (test API)
+   */
+  async createTransaction(
+    dto: {
+      propertyId: string;
+      buyerId: string;
+      sellerId: string;
+      amount: number;
+      type: string;
+    },
+    user: { sub: string; email: string; role: string; type: string },
+  ): Promise<any> {
+    const [property, buyer, seller] = await Promise.all([
+      this.prisma.property.findUnique({ where: { id: dto.propertyId } }),
+      this.prisma.user.findUnique({ where: { id: dto.buyerId } }),
+      this.prisma.user.findUnique({ where: { id: dto.sellerId } }),
+    ]);
+
+    if (!property) throw new NotFoundException('Property not found');
+    if (!buyer) throw new NotFoundException('Buyer not found');
+    if (!seller) throw new NotFoundException('Seller not found');
+
+    return this.prisma.transaction.create({
+      data: {
+        propertyId: dto.propertyId,
+        buyerId: dto.buyerId,
+        sellerId: dto.sellerId,
+        amount: dto.amount,
+        type: dto.type as any,
+        status: 'PENDING',
+      },
+      include: {
+        property: { select: { id: true, title: true, address: true } },
+        buyer: { select: { id: true, firstName: true, lastName: true, email: true } },
+        seller: { select: { id: true, firstName: true, lastName: true, email: true } },
+      },
+    });
+  }
+
+  /**
+   * Create a tax strategy suggestion
+   */
+  async createTaxStrategySuggestion(
+    transactionId: string,
+    dto: {
+      strategyType: string;
+      estimatedTaxRate?: number;
+      explanation?: string;
+      metadata?: Record<string, any>;
+    },
+    user: { sub: string; email: string; role: string; type: string },
+  ): Promise<any> {
+    const transaction = await this.prisma.transaction.findUnique({
+      where: { id: transactionId },
+      include: { property: { select: { id: true, city: true, state: true, country: true } } },
+    });
+
+    if (!transaction) throw new NotFoundException('Transaction not found');
+
+    const jurisdiction = [
+      transaction.property?.city,
+      transaction.property?.state,
+      transaction.property?.country,
+    ]
+      .filter(Boolean)
+      .join(', ');
+
+    return this.prisma.transactionTaxStrategy
+      .create({
+        data: {
+          transactionId,
+          createdById: user.sub,
+          strategyType: dto.strategyType,
+          jurisdiction: jurisdiction || 'Unknown',
+          explanation: dto.explanation ?? '',
+          version: 1,
+        },
+      })
+      .then((result) => {
+        this.notificationsService.sendNotification(
+          user.sub,
+          'Tax Strategy Created',
+          `Tax strategy "${dto.strategyType}" created for transaction ${transactionId}`,
+          'TAX_STRATEGY_CREATED',
+          result,
+        );
+        this.notificationsService.sendNotification(
+          transaction.buyerId,
+          'Tax Strategy Created',
+          `A tax strategy was created for your transaction ${transactionId}`,
+          'TAX_STRATEGY_CREATED',
+          result,
+        );
+        return result;
+      });
+  }
+
+  /**
+   * Update a tax strategy suggestion
+   */
+  async updateTaxStrategySuggestion(
+    transactionId: string,
+    strategyId: string,
+    dto: {
+      strategyType?: string;
+      jurisdiction?: string;
+    },
+    user: { sub: string; email: string; role: string; type: string },
+  ): Promise<any> {
+    const existing = await this.prisma.transactionTaxStrategy.findFirst({
+      where: { id: strategyId, transactionId },
+    });
+
+    if (!existing) throw new NotFoundException('Tax strategy not found');
+
+    return this.prisma.transactionTaxStrategy.update({
+      where: { id: strategyId },
+      data: {
+        ...(dto.strategyType && { strategyType: dto.strategyType }),
+        ...(dto.jurisdiction && { jurisdiction: dto.jurisdiction }),
+        version: (existing as any).version + 1,
+      },
+    });
   }
 
   /**

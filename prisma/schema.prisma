@@ -152,6 +152,7 @@ enum MilestoneStatus {
   DELAYED
 }
 
+
 // User model
 model User {
   id                       String    @id @default(uuid())
@@ -197,6 +198,7 @@ model User {
   blacklistedTokens       BlacklistedToken[]
   preferences             UserPreferences?
   activityLogs            ActivityLog[]
+  documentVersions        DocumentVersion[] @relation("DocumentVersionUploader")
   verificationDocuments   VerificationDocument[]
   sessions                Session[]
   passwordResetTokens     PasswordResetToken[]
@@ -551,6 +553,7 @@ model Transaction {
   disputes              Dispute[]
   transactionMilestones TransactionMilestone[]
   transactionHistory    TransactionHistory[]
+  cancelledBy           User?    @relation("CancelledTransactions", fields: [cancelledById], references: [id])
 
   @@index([propertyId])
   @@index([buyerId])
@@ -615,6 +618,7 @@ model Document {
   // Relations
   property Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  versions  DocumentVersion[]
   dispute  Dispute?  @relation(fields: [disputeId], references: [id], onDelete: SetNull)
 
   @@index([propertyId])
