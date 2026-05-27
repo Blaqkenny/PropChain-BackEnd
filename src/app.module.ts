@@ -27,6 +27,7 @@ import { TrackingModule } from './tracking/tracking.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { BlockchainModule } from './blockchain/blockchain.module';
 import { TransactionsModule } from './transactions/transactions.module';
+import { CommissionsModule } from './commissions/commissions.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -64,6 +65,7 @@ import { TransactionsModule } from './transactions/transactions.module';
     NotificationsModule,
     BlockchainModule,
     TransactionsModule,
+    CommissionsModule,
   ],
 
   controllers: [AppController],

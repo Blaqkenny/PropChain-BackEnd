@@ -1,7 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../database/prisma.service';
 import { CreatePropertyDto, UpdatePropertyDto } from './dto/property.dto';
+import { AssignAgentDto, UpdateAgentAssignmentDto } from './dto/agent-assignment.dto';
+import { AuthUserPayload } from '../auth/types/auth-user.type';
 import { FraudService } from '../fraud/fraud.service';
 import { PropertyStatus } from '../types/prisma.types';
 
@@ -41,7 +43,7 @@ export class PropertiesService {
 
   async findAll(params?: FindAllParams) {
     const { skip, take, where, orderBy } = params || {};
-    return this.prisma.property.findMany({
+    return (this.prisma.property as any).findMany({
       skip,
       take,
       where,
@@ -55,12 +57,25 @@ export class PropertiesService {
             email: true,
           },
         },
+        agents: {
+          include: {
+            agent: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                phone: true,
+              },
+            },
+          },
+        },
       },
     });
   }
 
   async findOne(id: string) {
-    return this.prisma.property.findUnique({
+    return (this.prisma.property as any).findUnique({
       where: { id },
       include: {
         owner: {
@@ -72,6 +87,19 @@ export class PropertiesService {
           },
         },
         documents: true,
+        agents: {
+          include: {
+            agent: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                phone: true,
+              },
+            },
+          },
+        },
       },
     });
   }
@@ -146,7 +174,7 @@ export class PropertiesService {
       propertyWhere.title = { contains: filter, mode: 'insensitive' as const };
     }
 
-    const properties = await this.prisma.property.findMany({
+    const properties = await (this.prisma.property as any).findMany({
       where: propertyWhere,
       select: {
         id: true,
@@ -175,6 +203,19 @@ export class PropertiesService {
             phone: true,
           },
         },
+        agents: {
+          include: {
+            agent: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                phone: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -197,6 +238,13 @@ export class PropertiesService {
       ownerEmail: prop.owner.email,
       ownerName: `${prop.owner.firstName} ${prop.owner.lastName}`,
       ownerPhone: prop.owner.phone,
+      agents: (prop.agents || []).map((pa: any) => ({
+        agentId: pa.agentId,
+        name: `${pa.agent.firstName} ${pa.agent.lastName}`,
+        email: pa.contactEmail || pa.agent.email,
+        phone: pa.contactPhone || pa.agent.phone,
+        commissionRate: Number(pa.commissionRate),
+      })),
       createdAt: prop.createdAt,
       updatedAt: prop.updatedAt,
     }));
@@ -205,5 +253,186 @@ export class PropertiesService {
       total: exportData.length,
       data: exportData,
     };
+  }
+
+  async assignAgent(propertyId: string, dto: AssignAgentDto, user: AuthUserPayload) {
+    const property = await this.prisma.property.findUnique({
+      where: { id: propertyId },
+    });
+    if (!property) {
+      throw new NotFoundException('Property not found');
+    }
+
+    if (user.role !== 'ADMIN' && property.ownerId !== user.sub) {
+      throw new ForbiddenException('Only the property owner or an admin can assign agents');
+    }
+
+    const agent = await this.prisma.user.findUnique({
+      where: { id: dto.agentId },
+    });
+    if (!agent) {
+      throw new NotFoundException('Agent user not found');
+    }
+    if (agent.role !== 'AGENT') {
+      throw new BadRequestException('Assigned user must have the AGENT role');
+    }
+
+    const existing = await (this.prisma as any).propertyAgent.findUnique({
+      where: {
+        propertyId_agentId: {
+          propertyId,
+          agentId: dto.agentId,
+        },
+      },
+    });
+    if (existing) {
+      throw new BadRequestException('Agent is already assigned to this property');
+    }
+
+    return (this.prisma as any).propertyAgent.create({
+      data: {
+        propertyId,
+        agentId: dto.agentId,
+        commissionRate: dto.commissionRate !== undefined ? new Decimal(dto.commissionRate.toString()) : new Decimal('0.03'),
+        contactPhone: dto.contactPhone ?? null,
+        contactEmail: dto.contactEmail ?? null,
+      },
+      include: {
+        agent: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+          },
+        },
+      },
+    });
+  }
+
+  async updateAgentAssignment(
+    propertyId: string,
+    agentId: string,
+    dto: UpdateAgentAssignmentDto,
+    user: AuthUserPayload,
+  ) {
+    const property = await this.prisma.property.findUnique({
+      where: { id: propertyId },
+    });
+    if (!property) {
+      throw new NotFoundException('Property not found');
+    }
+
+    if (user.role !== 'ADMIN' && property.ownerId !== user.sub) {
+      throw new ForbiddenException('Only the property owner or an admin can update agent assignments');
+    }
+
+    const assignment = await (this.prisma as any).propertyAgent.findUnique({
+      where: {
+        propertyId_agentId: {
+          propertyId,
+          agentId,
+        },
+      },
+    });
+    if (!assignment) {
+      throw new NotFoundException('Agent assignment not found for this property');
+    }
+
+    return (this.prisma as any).propertyAgent.update({
+      where: {
+        propertyId_agentId: {
+          propertyId,
+          agentId,
+        },
+      },
+      data: {
+        commissionRate: dto.commissionRate !== undefined ? new Decimal(dto.commissionRate.toString()) : undefined,
+        contactPhone: dto.contactPhone !== undefined ? dto.contactPhone : undefined,
+        contactEmail: dto.contactEmail !== undefined ? dto.contactEmail : undefined,
+      },
+      include: {
+        agent: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+          },
+        },
+      },
+    });
+  }
+
+  async removeAgentAssignment(propertyId: string, agentId: string, user: AuthUserPayload) {
+    const property = await this.prisma.property.findUnique({
+      where: { id: propertyId },
+    });
+    if (!property) {
+      throw new NotFoundException('Property not found');
+    }
+
+    if (user.role !== 'ADMIN' && property.ownerId !== user.sub) {
+      throw new ForbiddenException('Only the property owner or an admin can remove agent assignments');
+    }
+
+    const assignment = await (this.prisma as any).propertyAgent.findUnique({
+      where: {
+        propertyId_agentId: {
+          propertyId,
+          agentId,
+        },
+      },
+    });
+    if (!assignment) {
+      throw new NotFoundException('Agent assignment not found for this property');
+    }
+
+    return (this.prisma as any).propertyAgent.delete({
+      where: {
+        propertyId_agentId: {
+          propertyId,
+          agentId,
+        },
+      },
+    });
+  }
+
+  async getAgents(propertyId: string) {
+    const property = await this.prisma.property.findUnique({
+      where: { id: propertyId },
+    });
+    if (!property) {
+      throw new NotFoundException('Property not found');
+    }
+
+    const assignments = await (this.prisma as any).propertyAgent.findMany({
+      where: { propertyId },
+      include: {
+        agent: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+          },
+        },
+      },
+    });
+
+    return assignments.map((pa: any) => ({
+      id: pa.id,
+      propertyId: pa.propertyId,
+      agentId: pa.agentId,
+      commissionRate: Number(pa.commissionRate),
+      contactPhone: pa.contactPhone || pa.agent.phone,
+      contactEmail: pa.contactEmail || pa.agent.email,
+      createdAt: pa.createdAt,
+      updatedAt: pa.updatedAt,
+      agent: pa.agent,
+    }));
   }
 }
