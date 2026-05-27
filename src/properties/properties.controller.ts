@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Put, Delete, Param, Query, UseGuards } from '@nestjs/common';
 import { PropertiesService } from './properties.service';
 import { CreatePropertyDto, UpdatePropertyDto } from './dto/property.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -7,6 +7,11 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { AuthUserPayload } from '../auth/types/auth-user.type';
 import { UserRole } from '../types/prisma.types';
+import {
+  BulkPropertyStatusUpdateDto,
+  BulkPropertyDeleteDto,
+  BulkPropertyExportDto,
+} from './dto/bulk-operations.dto';
 
 @Controller('properties')
 export class PropertiesController {
@@ -40,5 +45,29 @@ export class PropertiesController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.propertiesService.remove(id);
+  }
+
+  @Post('bulk/status')
+  async bulkUpdatePropertyStatus(
+    @Body() body: BulkPropertyStatusUpdateDto,
+    @CurrentUser() user: AuthUserPayload,
+  ) {
+    return this.propertiesService.bulkUpdatePropertyStatus(body.propertyIds, body.status);
+  }
+
+  @Post('bulk/delete')
+  async bulkDeleteProperties(
+    @Body() body: BulkPropertyDeleteDto,
+    @CurrentUser() user: AuthUserPayload,
+  ) {
+    return this.propertiesService.bulkDeleteProperties(body.propertyIds);
+  }
+
+  @Post('bulk/export')
+  async bulkExportProperties(
+    @Body() body: BulkPropertyExportDto,
+    @CurrentUser() user: AuthUserPayload,
+  ) {
+    return this.propertiesService.bulkExportProperties(body.propertyIds, body.filter);
   }
 }

@@ -247,9 +247,7 @@ describe('BlockchainService', () => {
     it('should reject invalid addresses', () => {
       expect(service.isValidAddress('invalid')).toBe(false);
       expect(service.isValidAddress('0x123')).toBe(false);
-      expect(service.isValidAddress('0xGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG')).toBe(
-        false,
-      );
+      expect(service.isValidAddress('0xGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG')).toBe(false);
     });
   });
 
