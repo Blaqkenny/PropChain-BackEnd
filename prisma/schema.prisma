@@ -407,6 +407,12 @@ model Property {
   updatedAt       DateTime       @updatedAt @map("updated_at")
   viewCount    Int            @default(0) @map("view_count")
 
+    // Property Tax Information
+    annualTaxAmount   Decimal?       @map("annual_tax_amount") // Annual property tax amount
+    taxAssessmentValue Decimal?      @map("tax_assessment_value") // Assessed value for tax purposes
+    taxRate           Decimal?       @map("tax_rate") // Tax rate applied to property
+    taxHistory        Json?          @map("tax_history") // Historical tax records (array of objects)
+
   // Relations
   owner        User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   transactions Transaction[]
