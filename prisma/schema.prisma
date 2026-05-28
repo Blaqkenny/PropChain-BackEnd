@@ -225,6 +225,8 @@ model User {
   digestPreference        DigestPreference?
   createdTaxStrategies    TransactionTaxStrategy[] @relation("CreatedTransactionTaxStrategies")
   transactionHistory      TransactionHistory[]
+  favorites               PropertyFavorite[]
+  propertyViews           PropertyView[]
 
   @@index([email])
   @@index([role])
@@ -395,6 +397,7 @@ model Property {
   yearBuilt    Int?           @map("year_built")
   status       PropertyStatus @default(DRAFT)
   ownerId      String         @map("owner_id")
+  neighborhoodId String?      @map("neighborhood_id")
   latitude     Float?
   longitude    Float?
   features        String[] // Array of features (pool, garage, etc.)
@@ -402,19 +405,50 @@ model Property {
   videoUrl        String?        @map("video_url")
   createdAt       DateTime       @default(now()) @map("created_at")
   updatedAt       DateTime       @updatedAt @map("updated_at")
+  viewCount    Int            @default(0) @map("view_count")
 
   // Relations
-  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner        User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   transactions Transaction[]
   documents    Document[]
+  images       PropertyImage[]
   fraudAlerts  FraudAlert[]
+  favorites    PropertyFavorite[]
+  views        PropertyView[]
+  neighborhood Neighborhood?      @relation(fields: [neighborhoodId], references: [id], onDelete: SetNull)
 
   @@index([ownerId])
   @@index([status])
   @@index([city, state])
   @@index([price])
   @@index([propertyType])
+  @@index([viewCount])
+  @@index([neighborhoodId])
   @@map("properties")
+}
+
+// Property gallery image with optimized variants and ordering (#TASK2)
+model PropertyImage {
+  id           String   @id @default(uuid())
+  propertyId   String   @map("property_id")
+  url          String   // optimized full-size variant
+  thumbnailUrl String   @map("thumbnail_url")
+  mediumUrl    String   @map("medium_url")
+  filename     String
+  mimeType     String   @map("mime_type")
+  size         Int      // bytes (optimized full-size)
+  width        Int?
+  height       Int?
+  order        Int      @default(0)
+  isPrimary    Boolean  @default(false) @map("is_primary")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId, order])
+  @@index([propertyId, isPrimary])
+  @@map("property_images")
 }
 
 // Transaction model
